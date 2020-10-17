@@ -1,0 +1,17 @@
+#!/bin/bash
+
+if [ -z $EOS_IMAGE_NAME ]; then
+    IMAGE_NAME=eos-2020:latest
+fi
+
+if [ -z $EOS_CONTAINER_NAME ]; then
+    CONTAINER_NAME=eos
+fi
+
+docker run -itd \
+    --net host \
+    -v /dev:/dev \
+    -v /:/hostroot \
+    --name $EOS_CONTAINER_NAME \
+    --privileged \
+    $EOS_IMAGE_NAME

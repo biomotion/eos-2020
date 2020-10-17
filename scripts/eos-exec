@@ -1,0 +1,10 @@
+#!/bin/bash
+
+CMD=$@
+if [ -z $1 ]; then
+   CMD="bash"
+fi 
+
+docker exec -it \
+    -w /hostroot/$(pwd) \
+    $EOS_CONTAINER_NAME $CMD

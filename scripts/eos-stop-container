@@ -1,0 +1,4 @@
+#!/bin/bash
+
+docker stop $EOS_CONTAINER_NAME
+docker rm $EOS_CONTAINER_NAME
