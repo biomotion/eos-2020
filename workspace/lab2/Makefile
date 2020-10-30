@@ -2,7 +2,9 @@ CC=arm-unknown-linux-gnu-gcc
 CC_X86=gcc
 CFLAGS=-Wall
 
-TARGET=calculator
+ifndef TARGET
+  TARGET=lab2
+endif
 
 ARM_LIB_OPT=/opt/arm-unknown-linux-gnu-lib/arm-unknown-linux-gnu/lib/
 ARM_INC_OPT=/opt/arm-unknown-linux-gnu-lib/arm-unknown-linux-gnu/include/

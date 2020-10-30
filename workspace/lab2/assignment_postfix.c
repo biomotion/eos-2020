@@ -16,7 +16,6 @@ int main(int argc, char** argv){
   unsigned short key;
   char expr[100] = {0}, op;
   lcd_write_info_t display;
-  // lcd_full_image_info_t image;
 
   printf("start\n");
   if((fd=open("/dev/lcd", O_RDWR)) < 0){
@@ -24,8 +23,7 @@ int main(int argc, char** argv){
     exit(-1);
   }
 
-  while(1){
-  for(;i>=0; i--) expr[i] = '\0';
+  
   ret = ioctl(fd, _7SEG_IOCTL_ON, NULL);
   ret = ioctl(fd, LCD_IOCTL_CLEAR, NULL);
   display.Count = sprintf((char*) display.Msg, ">");
@@ -35,7 +33,13 @@ int main(int argc, char** argv){
     ret = ioctl(fd, KEY_IOCTL_WAIT_CHAR, &key);
     op = interpret(key);
     printf("%c\n", op);
-    if(op == '#') break;
+    if(op == '#'){
+      result = calc_recursive(expr);
+      printf("%s = %d\n", expr, result);
+      segment_display_decimal(fd, result);
+      led_display_binary(fd, result);
+      for(;i>=0; i--) expr[i] = '\0';
+    }
     else if((key&0xff) == '*'){
       for(; i>=0; i--){
         expr[i] = '\0';
@@ -48,7 +52,7 @@ int main(int argc, char** argv){
       display.Count = sprintf((char*) display.Msg, ">%s", expr);
       ret = ioctl(fd, LCD_IOCTL_WRITE, &display);
     }
-  };
+  // }
   // strcpy(expr, argv[1]);
   // display.Count = sprintf((char*) display.Msg, expr);
   // ret = ioctl(fd, LCD_IOCTL_WRITE, &display);
@@ -58,7 +62,6 @@ int main(int argc, char** argv){
   segment_display_decimal(fd, result);
   led_display_binary(fd, result);
 
-  }
   close(fd);
   return 0;
 }
@@ -76,36 +79,45 @@ char interpret(unsigned short k){
 int calc_recursive(char* operations){
   char* pos = NULL;
   char str1[100], str2[100];
-
-  if((pos = strchr(operations, '+')) != NULL){
+  int ans1, ans2;
+  if((pos = strrchr(operations, '+')) != NULL){
     strcpy(str1, operations);
     strcpy(str2, pos+1);
     str1[pos-operations] = '\0';
     printf("%s %c %s\n", str1, *pos, str2);
-    return calc_recursive(str2) + calc_recursive(str1);
+    ans1 = calc_recursive(str1);
+    ans2 = calc_recursive(str2);
+    return ans1 + ans2;
   }
-  if((pos = strchr(operations, '-')) != NULL){
+  if((pos = strrchr(operations, '-')) != NULL){
     strcpy(str1, operations);
     strcpy(str2, pos+1);
     str1[pos-operations] = '\0';
-    printf("%s %c %s\n", str1, *pos, str2);
 
-    return -(calc_recursive(str2) - calc_recursive(str1));
+    printf("%s %c %s\n", str1, *pos, str2);
+    ans1 = calc_recursive(str1);
+    ans2 = calc_recursive(str2);
+    return ans1 - ans2;
   }
-  if((pos = strchr(operations, '*')) != NULL){
+  if((pos = strrchr(operations, '*')) != NULL){
     strcpy(str1, operations);
     strcpy(str2, pos+1);
     str1[pos-operations] = '\0';
-    printf("%s %c %s\n", str1, *pos, str2);
 
-    return calc_recursive(str2) * calc_recursive(str1);
+    printf("%s %c %s\n", str1, *pos, str2);
+    ans1 = calc_recursive(str1);
+    ans2 = calc_recursive(str2);
+    return ans1 * ans2;
   }
-  if((pos = strchr(operations, '/')) != NULL){
+  if((pos = strrchr(operations, '/')) != NULL){
     strcpy(str1, operations);
     strcpy(str2, pos+1);
     str1[pos-operations] = '\0';
+
     printf("%s %c %s\n", str1, *pos, str2);
-    return 1/((float)calc_recursive(str2) / calc_recursive(str1));
+    ans1 = calc_recursive(str1);
+    ans2 = calc_recursive(str2);
+    return ans1 / ans2;
   }
   return atoi(operations);
 }

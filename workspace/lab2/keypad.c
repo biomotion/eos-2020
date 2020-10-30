@@ -16,17 +16,17 @@ int main(int argc, char** argv){
 
     ioctl(fd, KEY_IOCTL_CLEAR, key);
     while(1){
-        ret = ioctl(fd, KEY_IOCTL_WAIT_CHAR, &key);
+        // ret = ioctl(fd, KEY_IOCTL_WAIT_CHAR, &key);
 
-        // ret = ioctl(fd, KEY_IOCTL_CHECK_EMTPY, &key);
-        // if(ret < 0){
-        //     printf("n\n");
-        //     sleep(1);
-        //     continue;
-        // }else{
-        //     printf("y\n");
-        // }
-        // ret = ioctl(fd, KEY_IOCTL_GET_CHAR, &key);
+        ret = ioctl(fd, KEY_IOCTL_CHECK_EMTPY, &key);
+        if(ret < 0){
+            printf("n\n");
+            sleep(1);
+            continue;
+        }else{
+            printf("y\n");
+        }
+        ret = ioctl(fd, KEY_IOCTL_GET_CHAR, &key);
         printf("%c\n", (key & 0xff));
     }
     close(fd);
