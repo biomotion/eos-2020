@@ -1,14 +1,39 @@
 #!/bin/bash
 
+XAUTH=/tmp/.docker.xauth
+if [ ! -f $XAUTH ]
+then
+    xauth_list=$(xauth nlist $DISPLAY)
+    xauth_list=$(sed -e 's/^..../ffff/' <<< "$xauth_list")
+    if [ ! -z "$xauth_list" ]
+    then
+        echo "$xauth_list" | xauth -f $XAUTH nmerge -
+    else
+        touch $XAUTH
+    fi
+    chmod a+r $XAUTH
+fi
+
+# Prevent executing "docker run" when xauth failed.
+if [ ! -f $XAUTH ]; then
+    echo "[$XAUTH] was not properly created. Exiting..."
+    exit 1
+fi
+
 if [ -z $EOS_IMAGE_NAME ]; then
-    IMAGE_NAME=eos-2020:latest
+    EOS_IMAGE_NAME=eos-2020:latest
 fi
 
 if [ -z $EOS_CONTAINER_NAME ]; then
-    CONTAINER_NAME=eos
+    EOS_CONTAINER_NAME=eos
 fi
 
 docker run -itd \
+    -e DISPLAY=$DISPLAY \
+    -e QT_X11_NO_MITSHM=1 \
+    -e XAUTHORITY=$XAUTH \
+    -v "$XAUTH:$XAUTH" \
+    -v "/tmp/.X11-unix:/tmp/.X11-unix" \
     --net host \
     -v /dev:/dev \
     -v /:/hostroot \
