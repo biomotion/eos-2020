@@ -10,6 +10,9 @@ RUN apt-get update && \
         manpages-posix-dev \
         manpages-dev \
         lib32ncurses5-dev libncurses5-dev \
+        libxrender-dev libxtst-dev \
+        flex bison swig python-dev \
+        ibyaml-dev pkg-config python3-dev \
         make patch \
         net-tools \
         wget \
@@ -39,7 +42,4 @@ USER $USER
 ENV HOME=/home/$USER
 #WORKDIR /home/$USER
 
-COPY --chown=$USER ./arm-env $HOME/.arm-env 
-RUN echo "source /$HOME/.arm-env" >> $HOME/.bashrc
-#COPY ./arm_entrypoint.sh /
-#ENTRYPOINT ["/arm_entrypoint.sh"]
+RUN echo "source /$HOME/.arm_bashrc" >> $HOME/.bashrc

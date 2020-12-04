@@ -7,6 +7,7 @@ fi
 
 docker exec -it \
     -e MICROTIME_PATH \
+    -e EOS_REPO=/hostroot${EOS_REPO} \
     -e DISPLAY \
     -w /hostroot/$(pwd) \
     $EOS_CONTAINER_NAME $CMD

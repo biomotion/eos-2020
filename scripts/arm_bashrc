@@ -1,3 +1,6 @@
 export ARM_GCC_TOOLCHAIN=/opt/arm-unknown-linux-gnu/bin
 PATH="$PATH:${ARM_GCC_TOOLCHAIN}"
 
+export CROSS_COMPILE=arm-linux-gnueabihf-
+source /tools/Xilinx/SDK/2018.3/settings64.sh
+

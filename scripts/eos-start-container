@@ -1,6 +1,8 @@
 #!/bin/bash
 
-XAUTH=/tmp/.docker.xauth
+BASH_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+XAUTH=/tmp/.eos_docker.xauth
 if [ ! -f $XAUTH ]
 then
     xauth_list=$(xauth nlist $DISPLAY)
@@ -34,6 +36,7 @@ docker run -itd \
     -e XAUTHORITY=$XAUTH \
     -v "$XAUTH:$XAUTH" \
     -v "/tmp/.X11-unix:/tmp/.X11-unix" \
+    -v "$BASH_PATH/arm_bashrc:/home/user/.arm_bashrc" \
     --net host \
     -v /dev:/dev \
     -v /:/hostroot \
