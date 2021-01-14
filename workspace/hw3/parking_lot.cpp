@@ -17,23 +17,6 @@ ParkingLot::ParkingLot(int sock_fd)
   currentVehicle = std::pair<int, VehicleInfo>(0, VehicleInfo(VEH_STATE_INIT));
 }
 
-void ParkingLot::runSystem()
-{
-  int ret;
-  pthread_t thread;
-  while (!stop)
-  {
-    if ((ret = waitConnection()) < 0)
-    {
-      perror("Error: wait_Connection\n");
-    }
-    if (pthread_create(&thread, NULL, (void *(*)(void *)) & (this->handleConnection), (void *)this))
-    {
-      perror("Error: pthread_create()\n");
-    }
-  }
-}
-
 int ParkingLot::waitConnection()
 {
   struct sockaddr_in cln_addr;
@@ -48,256 +31,44 @@ int ParkingLot::waitConnection()
   return conn_fd;
 }
 
+void ParkingLot::runSystem()
+{
+  int ret;
+  pthread_t *thread = new pthread_t();
+
+  while (!stop)
+  {
+    if ((ret = waitConnection()) < 0)
+    {
+      perror("Error: wait_Connection\n");
+    }
+    ClientSession *session = new ClientSession(ret, *this);
+
+    if (pthread_create(thread, NULL, (void *(*)(void *)) & (this->handleConnection), (void *)session))
+    {
+      perror("Error: pthread_create()\n");
+    }
+    clientThreads.push_back(thread);
+  }
+  // for(std::vector<pthread_t*>::iterator it=clientThreads.begin(); it!=clientThreads.end(); it++){
+  //   pthread_join()
+  // }
+}
+
 void *ParkingLot::handleConnection(void *p)
 {
-  ParkingLot *t = (ParkingLot *)p;
-  int sysState = PL_STATE_WELCOME;
-  int conn = t->conn_fd;
-  int finish = 0;
-  int vehId = -1;
-  while (!t->stop && !finish)
-  {
-    // printf("state: %d\n", sysState);
-    switch (sysState)
-    {
-    case PL_STATE_WELCOME:
-      sysState = t->showWelcome(conn, &vehId);
-      break;
-    case PL_STATE_MENU_NOT_RESERVED:
-      sysState = t->showMenuNotReserved(conn, &vehId);
-      break;
-    case PL_STATE_MENU_RESERVED:
-      sysState = t->showMenuReserved(conn, &vehId);
-      break;
-    case PL_STATE_MENU_PARKED:
-      sysState = t->showMenuParked(conn, &vehId);
-      break;
-    case PL_STATE_PAY:
-      sysState = t->showPay(conn, &vehId);
-      break;
-    case PL_STATE_WAIT_CONNECTION:
-      finish = 1;
-      break;
-    default:
-      perror("Invalid State\n");
-      break;
-    }
-  }
+  ClientSession *s = (ClientSession *)p;
+  printf("running session\n");
+  s->run();
+  printf("exit\n");
   pthread_exit(NULL);
-}
-
-int ParkingLot::showWelcome(int cfd, int* vehId)
-{
-  char buf[MSG_BUFSIZE];
-  // Welcome message on lcd
-  // printMessage("Input plate num: ");
-  // Get Vehicle ID input
-  // getMessage()
-  if (getMessage(cfd, buf) == -1)
-  {
-    return PL_STATE_WAIT_CONNECTION;
-  }
-
-  currentVehicle.first = atoi(buf); //assign input data;
-  // search stored vehicle & get vehicle state
-  currentVehicle.second = getVehState(currentVehicle.first);
-  // vehList[currentVehicle.first] = currentVehicle.second;
-  // return new system state
-  loggedInVeh.push_back(currentVehicle.first);
-  if (currentVehicle.second.state == VEH_STATE_INIT)
-  {
-    return PL_STATE_MENU_NOT_RESERVED;
-  }
-  else if (currentVehicle.second.state == VEH_STATE_RESERVED)
-  {
-    return PL_STATE_MENU_RESERVED;
-  }
-  else
-  { // PARKED or PARKED_NOT_RESERVED
-    return PL_STATE_MENU_PARKED;
-  }
-}
-
-int ParkingLot::showMenuNotReserved(int cfd, int* vehId)
-{
-  char msg_buf[MSG_BUFSIZE];
-  char *tok;
-  int lot, grid;
-
-  sprintf(msg_buf, "%s", "You haven't reserved grid.");
-  printMessage(cfd, msg_buf);
-  while (1)
-  {
-    //get input
-    if (getMessage(cfd, msg_buf) == -1)
-    {
-      return PL_STATE_WAIT_CONNECTION;
-    }
-
-    // printf("%s", msg_buf);
-    tok = strtok(msg_buf, " ");
-    // printf("tok = %s\n", tok);
-    // printf("msg = %s\n", msg_buf);
-    if (strcmp(tok, "show") == 0)
-    {
-      getSpace(msg_buf);
-      printMessage(cfd, msg_buf);
-      continue;
-    }
-    else if (strcmp(tok, "reserve") == 0)
-    {
-      tok = strtok(NULL, " ");
-      if (tok == NULL)
-      {
-        printMessage(cfd, "Invaild command.");
-        continue;
-      }
-      lot = atoi(tok);
-
-      tok = strtok(NULL, " ");
-      if (tok == NULL)
-      {
-        printMessage(cfd, "Invaild command.");
-        continue;
-      }
-      grid = atoi(tok);
-      if (selectGrid(cfd, lot, grid) == 0)
-      {
-        currentVehicle.second.state = VEH_STATE_RESERVED;
-        this->setVehState(currentVehicle.first, currentVehicle.second);
-        printMessage(cfd, "Reserve successful.");
-        return PL_STATE_WELCOME;
-      }
-      // return PL_STATE_CHOOSE;
-    }
-    else if (strcmp(tok, "check-in") == 0)
-    {
-      tok = strtok(NULL, " ");
-      if (tok == NULL)
-      {
-        printMessage(cfd, "Invaild command.");
-        continue;
-      }
-      lot = atoi(tok);
-
-      tok = strtok(NULL, " ");
-      if (tok == NULL)
-      {
-        printMessage(cfd, "Invaild command.");
-        continue;
-      }
-      grid = atoi(tok);
-      if (selectGrid(cfd, lot, grid) == 0)
-      {
-        currentVehicle.second.state = VEH_STATE_PARKED;
-        this->setVehState(currentVehicle.first, currentVehicle.second);
-        printMessage(cfd, "Check-in successful.");
-        return PL_STATE_WELCOME;
-      }
-    }
-    else if (strcmp(tok, "exit") == 0)
-    {
-      printMessage(cfd, "Logout.");
-      return PL_STATE_WELCOME;
-    }
-    else
-    {
-      // std::cerr << "invalid input" << sysState << std::endl;
-      printMessage(cfd, "Invaild command.");
-      continue;
-    }
-  }
-}
-
-int ParkingLot::showMenuReserved(int cfd, int* vehId)
-{
-  char msg_buf[MSG_BUFSIZE];
-
-  // Show menu options on lcd
-
-  sprintf(msg_buf, "%s", "You have reserved grid.");
-  printMessage(cfd, msg_buf);
-  while (1)
-  {
-    //get input
-    if (getMessage(cfd, msg_buf) == -1)
-    {
-      return PL_STATE_WAIT_CONNECTION;
-    }
-
-    // printf("%s", msg_buf);
-
-    if (strcmp(msg_buf, "show") == 0)
-    {
-      getSpace(msg_buf);
-      printMessage(cfd, msg_buf);
-      continue;
-    }
-    else if (strcmp(msg_buf, "cancel") == 0)
-      return PL_STATE_PAY;
-    else if (strcmp(msg_buf, "check-in") == 0)
-    {
-      currentVehicle.second.state = VEH_STATE_PARKED;
-      this->setVehState(currentVehicle.first, currentVehicle.second);
-      printMessage(cfd, "Check-in successful.");
-      return PL_STATE_WELCOME;
-    }
-    else if (strcmp(msg_buf, "exit") == 0)
-    {
-      return PL_STATE_WELCOME;
-      printMessage(cfd, "Logout.");
-    }
-    else
-    {
-      // std::cerr << "invalid input" << sysState << std::endl;
-      printMessage(cfd, "Invaild command.");
-      continue;
-    }
-  }
-}
-
-int ParkingLot::showMenuParked(int cfd, int* vehId)
-{
-  char msg_buf[MSG_BUFSIZE];
-
-  sprintf(msg_buf, "Your grid is at lot P%d grid %d.", currentVehicle.second.lot, currentVehicle.second.grid);
-  printMessage(cfd, msg_buf);
-  while (1)
-  {
-
-    //get input
-    if (getMessage(cfd, msg_buf) == -1)
-    {
-      return PL_STATE_WAIT_CONNECTION;
-    }
-
-    // printf("%s", msg_buf);
-    if (strcmp(msg_buf, "show") == 0)
-    {
-      getSpace(msg_buf);
-      printMessage(cfd, msg_buf);
-      return PL_STATE_MENU_NOT_RESERVED;
-    }
-    else if (strcmp(msg_buf, "pick-up") == 0)
-      return PL_STATE_PAY;
-    else if (strcmp(msg_buf, "exit") == 0)
-    {
-      printMessage(cfd, "Logout.");
-      return PL_STATE_WELCOME;
-    }
-    else
-    {
-      // std::cerr << "invalid input" << sysState << std::endl;
-      printMessage(cfd, "Invaild command.");
-      continue;
-    }
-  }
 }
 
 void ParkingLot::getSpace(char *msg_buf)
 {
   int sum = 0, n = 0;
-  char *gridState = this->getGridState();
+  char gridState[3] = {0};
+  this->getGridState(gridState);
 
   for (int i = 0; i < 3; i++)
   {
@@ -320,56 +91,23 @@ void ParkingLot::getSpace(char *msg_buf)
   }
 }
 
-int ParkingLot::selectGrid(int cfd, int lot, int grid)
+int ParkingLot::selectGrid(int lot, int grid)
 {
-  // printf("selecting %d, %d\n", lot, grid);
-  char *gridState = this->getGridState();
+  printf("selecting %d, %d\n", lot, grid);
+  char gridState[3] = {0};
+  this->getGridState(gridState);
   if (lot > 3 || lot < 1 || grid > 8 || grid < 1)
   {
-    // std::cerr << "invalid input" << sysState << std::endl;
-    printMessage(cfd, "Invaild command.");
-    return -1;
+    return 1;
   }
   else if ((bit(grid - 1) & gridState[lot - 1]) == 0)
   {
-    currentVehicle.second.lot = lot;
-    currentVehicle.second.grid = grid;
     return 0;
   }
   else
   {
-    printMessage(cfd, "Error! Please select an ideal grid.");
     return -1;
   }
-}
-
-int ParkingLot::showPay(int cfd, int* vehId)
-{
-  // <!-- if action == cancel -->
-  // Reserve fee: $20
-  char msg_buf[MSG_BUFSIZE] = {0};
-  if (currentVehicle.second.state == VEH_STATE_PARKED)
-  {
-    sprintf(msg_buf, "Parking fee: $40.");
-    balance += 30;
-  }
-  else if (currentVehicle.second.state == VEH_STATE_PARKED_NO_RESERVED)
-  {
-    sprintf(msg_buf, "Parking fee: $30.");
-    balance += 40;
-  }
-  else if (currentVehicle.second.state == VEH_STATE_RESERVED)
-  {
-    sprintf(msg_buf, "Reserve fee: $20.");
-    balance += 20;
-  }
-
-  currentVehicle.second.state = VEH_STATE_INIT;
-  this->setVehState(currentVehicle.first, currentVehicle.second);
-
-  printMessage(cfd, msg_buf);
-
-  return PL_STATE_WELCOME;
 }
 
 VehicleInfo ParkingLot::getVehState(int id)
@@ -400,46 +138,23 @@ void ParkingLot::setVehState(int id, VehicleInfo state)
   }
 }
 
-char *ParkingLot::getGridState()
+void ParkingLot::getGridState(char state[3])
 {
-  char *gridState = new char[3];
   // std::cout << "getting\n";
+  printf("len(vehList)=%d\n", vehList.size());
   for (std::map<int, VehicleInfo>::iterator it = vehList.begin(); it != vehList.end(); it++)
   {
     // std::cout << "getting\n";
-    // printf("%d,%d,%d,%d\n", it->first, it->second.lot, it->second.grid, it->second.state);
+    printf("%d,%d,%d,%d\n", it->first, it->second.lot, it->second.grid, it->second.state);
     if (it->second.state != VEH_STATE_INIT)
     {
       // printf("%d, %d = 1\n", it->second.lot, bit(it->second.grid-1));
-      gridState[it->second.lot - 1] |= bit(it->second.grid - 1);
+      state[it->second.lot - 1] |= bit(it->second.grid - 1);
       // printf("lot:%d\n", (int)gridState[it->second.lot -1]);
     }
   }
-
-  return gridState;
-}
-
-int ParkingLot::printMessage(int conn, const char *msg, bool erase)
-{
-  return write(conn, msg, strlen(msg));
-}
-
-int ParkingLot::getMessage(int conn, char *msg)
-{
-  int n;
-  if ((n = read(conn, msg, MSG_BUFSIZE)) == 0)
-  {
-    // printf("Connection closed\n");
-    close(conn);
-    return -1;
-  }
-  if (msg[n - 1] == '\n')
-    msg[n - 1] = '\0';
-  else
-    msg[n] = '\0';
-
-  printf("[Connection ID:%d]cmd> %s\n", conn, msg);
-  return n - 1;
+  printf("return\n");
+  return;
 }
 
 void ParkingLot::logStatus(const char *log_file)
@@ -467,4 +182,311 @@ int ParkingLot::stopSystem()
 {
   stop = 1;
   return 0;
+}
+
+ClientSession::ClientSession(int connfd_, ParkingLot &lot_)
+{
+  connfd = connfd_;
+  lot = &lot_;
+  clientState = CLIENT_STATE_WELCOME;
+  printf("initialized\n");
+}
+
+int ClientSession::showWelcome()
+{
+  char buf[MSG_BUFSIZE];
+  // Welcome message on lcd
+  // printMessage("Input plate num: ");
+  // Get Vehicle ID input
+  // getMessage()
+  if (getMessage(buf) == -1)
+  {
+    return CLIENT_STATE_EXIT;
+  }
+
+  this->veh.first = atoi(buf); //assign input data;
+  // search stored vehicle & get vehicle state
+  this->veh.second = this->getLot()->getVehState(this->veh.first);
+
+  // TODO
+  // loggedInVeh.push_back(this->veh.first);
+
+  if (this->veh.second.state == VEH_STATE_INIT)
+  {
+    return CLIENT_STATE_MENU_NOT_RESERVED;
+  }
+  else if (this->veh.second.state == VEH_STATE_RESERVED)
+  {
+    return CLIENT_STATE_MENU_RESERVED;
+  }
+  else
+  { // PARKED or PARKED_NOT_RESERVED
+    return CLIENT_STATE_MENU_PARKED;
+  }
+}
+
+int ClientSession::showMenuNotReserved()
+{
+  char msg_buf[MSG_BUFSIZE];
+  char *tok;
+  int lot, grid;
+
+  printMessage("You haven't reserved grid.");
+  while (1)
+  {
+    if (getMessage(msg_buf) == -1)
+    {
+      return CLIENT_STATE_EXIT;
+    }
+
+    // printf("%s", msg_buf);
+    tok = strtok(msg_buf, " ");
+    // printf("tok = %s\n", tok);
+    // printf("msg = %s\n", msg_buf);
+    if (strcmp(tok, "show") == 0)
+    {
+      this->getLot()->getSpace(msg_buf);
+      printMessage(msg_buf);
+      continue;
+    }
+    else if (strcmp(tok, "reserve") == 0)
+    {
+      tok = strtok(NULL, " ");
+      if (tok == NULL)
+      {
+        printMessage("Invaild command.");
+        continue;
+      }
+      lot = atoi(tok);
+
+      tok = strtok(NULL, " ");
+      if (tok == NULL)
+      {
+        printMessage("Invaild command.");
+        continue;
+      }
+      grid = atoi(tok);
+      if (this->getLot()->selectGrid(lot, grid) == 0)
+      {
+        this->veh.second.state = VEH_STATE_RESERVED;
+        this->veh.second.lot = lot;
+        this->veh.second.grid = grid;
+        this->getLot()->setVehState(this->veh.first, this->veh.second);
+        printMessage("Reserve successful.");
+        return CLIENT_STATE_WELCOME;
+      }else if (this->getLot()->selectGrid(lot, grid) == -1){
+        printMessage("Error! Please select an ideal grid.");
+      }else{
+        printMessage("Invaild command.");
+      }
+      // return CLIENT_STATE_CHOOSE;
+    }
+    else if (strcmp(tok, "check-in") == 0)
+    {
+      tok = strtok(NULL, " ");
+      if (tok == NULL)
+      {
+        printMessage("Invaild command.");
+        continue;
+      }
+      lot = atoi(tok);
+
+      tok = strtok(NULL, " ");
+      if (tok == NULL)
+      {
+        printMessage("Invaild command.");
+        continue;
+      }
+      grid = atoi(tok);
+      if (this->getLot()->selectGrid(lot, grid) == 0)
+      {
+        this->veh.second.state = VEH_STATE_PARKED;
+        this->veh.second.lot = lot;
+        this->veh.second.grid = grid;
+        this->getLot()->setVehState(this->veh.first, this->veh.second);
+        printMessage("Check-in successful.");
+        return CLIENT_STATE_WELCOME;
+      }else if (this->getLot()->selectGrid(lot, grid) == -1){
+        printMessage("Error! Please select an ideal grid.");
+      }else{
+        printMessage("Invaild command.");
+      }
+    }
+    else if (strcmp(tok, "exit") == 0)
+    {
+      printMessage("Logout.");
+      return CLIENT_STATE_WELCOME;
+    }
+    else
+    {
+      // std::cerr << "invalid input" << sysState << std::endl;
+      printMessage("Invaild command.");
+      continue;
+    }
+  }
+}
+
+int ClientSession::showMenuReserved()
+{
+  char msg_buf[MSG_BUFSIZE];
+
+  printMessage("You have reserved grid.");
+
+  while (1)
+  {
+    //get input
+    if (getMessage(msg_buf) == -1)
+    {
+      return CLIENT_STATE_EXIT;
+    }
+
+    // printf("%s", msg_buf);
+
+    if (strcmp(msg_buf, "show") == 0)
+    {
+      this->getLot()->getSpace(msg_buf);
+      printMessage(msg_buf);
+      continue;
+    }
+    else if (strcmp(msg_buf, "cancel") == 0)
+      return CLIENT_STATE_PAY;
+    else if (strcmp(msg_buf, "check-in") == 0)
+    {
+      this->veh.second.state = VEH_STATE_PARKED;
+      // this->veh.second.lot = lot;
+      // this->veh.second.grid = grid;
+      this->getLot()->setVehState(this->veh.first, this->veh.second);
+      printMessage("Check-in successful.");
+      return CLIENT_STATE_WELCOME;
+    }
+    else if (strcmp(msg_buf, "exit") == 0)
+    {
+      return CLIENT_STATE_WELCOME;
+      printMessage("Logout.");
+    }
+    else
+    {
+      // std::cerr << "invalid input" << sysState << std::endl;
+      printMessage("Invaild command.");
+      continue;
+    }
+  }
+}
+
+int ClientSession::showMenuParked()
+{
+  char msg_buf[MSG_BUFSIZE];
+
+  sprintf(msg_buf, "Your grid is at lot P%d grid %d.", this->veh.second.lot, this->veh.second.grid);
+  printMessage(msg_buf);
+  while (1)
+  {
+
+    //get input
+    if (getMessage(msg_buf) == -1)
+    {
+      return CLIENT_STATE_EXIT;
+    }
+
+    // printf("%s", msg_buf);
+    if (strcmp(msg_buf, "show") == 0)
+    {
+      this->getLot()->getSpace(msg_buf);
+      printMessage(msg_buf);
+      return CLIENT_STATE_MENU_NOT_RESERVED;
+    }
+    else if (strcmp(msg_buf, "pick-up") == 0)
+      return CLIENT_STATE_PAY;
+    else if (strcmp(msg_buf, "exit") == 0)
+    {
+      printMessage("Logout.");
+      return CLIENT_STATE_WELCOME;
+    }
+    else
+    {
+      // std::cerr << "invalid input" << sysState << std::endl;
+      printMessage("Invaild command.");
+      continue;
+    }
+  }
+}
+
+int ClientSession::showPay()
+{
+  // <!-- if action == cancel -->
+  // Reserve fee: $20
+  char msg_buf[MSG_BUFSIZE] = {0};
+  if (this->veh.second.state == VEH_STATE_PARKED)
+  {
+    sprintf(msg_buf, "Parking fee: $40.");
+    this->getLot()->balance += 30;
+  }
+  else if (this->veh.second.state == VEH_STATE_PARKED_NO_RESERVED)
+  {
+    sprintf(msg_buf, "Parking fee: $30.");
+    this->getLot()->balance += 40;
+  }
+  else if (this->veh.second.state == VEH_STATE_RESERVED)
+  {
+    sprintf(msg_buf, "Reserve fee: $20.");
+    this->getLot()->balance += 20;
+  }
+
+  this->veh.second.state = VEH_STATE_INIT;
+  this->getLot()->setVehState(this->veh.first, this->veh.second);
+
+  printMessage(msg_buf);
+
+  return CLIENT_STATE_WELCOME;
+}
+
+int ClientSession::printMessage(const char *msg)
+{
+  printf("respond>%s\n", msg);
+  return write(this->connfd, msg, strlen(msg));
+}
+
+int ClientSession::getMessage(char *msg)
+{
+  int n;
+  if ((n = read(this->connfd, msg, MSG_BUFSIZE)) == 0)
+  {
+    // printf("Connection closed\n");
+    close(this->connfd);
+    return -1;
+  }
+  if (msg[n - 1] == '\n')
+    msg[n - 1] = '\0';
+  else
+    msg[n] = '\0';
+
+  printf("[Connection ID:%d]cmd> %s\n", this->connfd, msg);
+  return n - 1;
+}
+
+void ClientSession::run()
+{
+  while (clientState != CLIENT_STATE_EXIT)
+  {
+    switch (clientState)
+    {
+    case CLIENT_STATE_WELCOME:
+      clientState = showWelcome();
+      break;
+    case CLIENT_STATE_MENU_PARKED:
+      clientState = showMenuParked();
+      break;
+    case CLIENT_STATE_MENU_NOT_RESERVED:
+      clientState = showMenuNotReserved();
+      break;
+    case CLIENT_STATE_MENU_RESERVED:
+      clientState = showMenuReserved();
+      break;
+    case CLIENT_STATE_PAY:
+      clientState = showPay();
+      break;
+    default:
+      break;
+    }
+  }
 }

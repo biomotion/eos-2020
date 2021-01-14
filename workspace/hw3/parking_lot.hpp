@@ -16,12 +16,12 @@
 
 #include "socket_utils.h"
 
-#define PL_STATE_WAIT_CONNECTION 0
-#define PL_STATE_WELCOME 1
-#define PL_STATE_MENU_PARKED 2
-#define PL_STATE_MENU_NOT_RESERVED 3
-#define PL_STATE_MENU_RESERVED 4
-#define PL_STATE_PAY 7
+#define CLIENT_STATE_WELCOME 1
+#define CLIENT_STATE_MENU_PARKED 2
+#define CLIENT_STATE_MENU_NOT_RESERVED 3
+#define CLIENT_STATE_MENU_RESERVED 4
+#define CLIENT_STATE_PAY 7
+#define CLIENT_STATE_EXIT 8
 
 #define VEH_STATE_INIT 0
 #define VEH_STATE_RESERVED 1
@@ -54,35 +54,53 @@ private:
   int stop;
   int conn_fd, sock_fd;
   // int sysState;
-  int balance;
   std::pair<int, VehicleInfo> currentVehicle;
   std::vector<int> loggedInVeh;
+  std::vector<pthread_t*> clientThreads;
   std::map<int, VehicleInfo> vehList; // pairs of "ID" and vehicle
-  VehicleInfo getVehState(int);
-  void setVehState(int, VehicleInfo);
-  char *getGridState();
-  // For I/O
-  int printMessage(int cfd, const char *msg, bool erase = true);
-  int getMessage(int cfd, char *msg);
 
+  // For I/O
   static void* handleConnection(void* p);
 public:
   ParkingLot();
   ParkingLot(int sock_fd);
+  // ~ParkingLot();
   // State Nodes
-  int showWelcome(int cfd, int* vehId);
-  int showMenuParked(int cfd, int* vehId);
-  int showMenuReserved(int cfd, int* vehId);
-  int showMenuNotReserved(int cfd, int* vehId);
-  int showPay(int cfd, int* vehId);
-  int selectGrid(int cfd, int lot, int grid);
+  int selectGrid(int lot, int grid);
+  VehicleInfo getVehState(int);
+  void setVehState(int, VehicleInfo);
+  // void parkVehicle(int, int, int);
+  // void reserveVehicle(int, int, int);
+  void getGridState(char *);
   void getSpace(char *);
   // Actions
   void runSystem();
   int waitConnection();
   int stopSystem();
   void logStatus(const char *log_file);
+  int balance;
+};
 
+class ClientSession{
+private:
+  std::pair<int, VehicleInfo> veh;
+  ParkingLot* lot;
+  int clientState;
+  int connfd;
+  int showWelcome();
+  int showMenuParked();
+  int showMenuReserved();
+  int showMenuNotReserved();
+  int showPay();
+
+  int printMessage(const char *msg);
+  int getMessage(char *msg);
+public:
+  // ClientSession();
+  ClientSession(int connfd_, ParkingLot& lot_);
+  ClientSession(const ClientSession& c);
+  void run();
+  ParkingLot* getLot() {return lot;}
 };
 
 #endif
